@@ -14,6 +14,10 @@ dependencies = [
     "zuko>=1.6.0",
 ]
 
+[project.urls]
+Source = "https://github.com/bhvieira/dlvmlib"
+Issues = "https://github.com/bhvieira/dlvmlib/issues"
+
 [build-system]
 requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
