@@ -97,10 +97,12 @@ class SUMO:
     `d log p(x | c) / d theta`. SUMO's expectation doesn't depend on the encoder, so the encoder
     descends `SUMO^2` instead, whose gradient is an unbiased estimate of the gradient of SUMO's
     variance (their Eq. 12). That gradient is occasionally very large, and the paper clips the
-    encoder's gradients.
+    encoder's gradients (their Section 3.3), and in its density-modeling experiments the
+    decoder's too (their Appendix A.8).
 
-    One `K` is drawn per call and shared by the batch, as in their Algorithm 1. Every
-    datapoint's estimate stays unbiased.
+    One `K` is drawn per call, as in their Algorithm 1. Algorithm 1 handles a single datapoint,
+    so sharing `K` across the batch is this library's choice. Every datapoint's estimate stays
+    unbiased.
     """
 
     def __init__(self, m: int = 1, tail: RouletteTail | None = None) -> None:

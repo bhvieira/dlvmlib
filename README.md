@@ -108,9 +108,11 @@ The draws needed grow with the latent dimension.
 
 ### SUMO draws one `K` per call
 
-As in the paper's Algorithm 1, one number of terms `K` is drawn per call and shared by the batch, and every datapoint's estimate stays unbiased.
+As in the paper's Algorithm 1, one number of terms `K` is drawn per call.
+Algorithm 1 handles a single datapoint, so sharing `K` across the batch is this library's choice, and every datapoint's estimate stays unbiased.
 `RouletteTail` is the paper's Eq. 10: `P(K >= j) = 1 / j` below `alpha = 80` and geometric beyond, about 5 terms on average.
-The paper clips the encoder's gradients, because the gradient of `SUMO^2` is occasionally very large.
+The paper clips the encoder's gradients, because the gradient of `SUMO^2` is occasionally very large (Section 3.3).
+In its density-modeling experiments it clips the decoder's gradients too (Appendix A.8).
 
 ## Develop
 
