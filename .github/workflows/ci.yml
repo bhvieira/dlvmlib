@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The versions that uv.lock pins, with the checks that the pre-commit hooks run.
+  locked:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - run: uv run --frozen ruff check
+      - run: uv run --frozen ruff format --check
+      - run: uv run --frozen ty check
+      - run: uv run --frozen python -m unittest discover -s tests -t .
+
+  # The lowest versions that pyproject.toml allows, so that its floors stay true. The runners
+  # have no GPU, so this job installs torch's CPU build.
+  lowest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.10"
+          activate-environment: true
+      - run: uv pip install . --resolution lowest-direct --torch-backend cpu
+      - run: python -m unittest discover -s tests -t .
