@@ -3,8 +3,11 @@
 A `VAE` is the latent variable model `p(x, z | c) = p(x | z, c) p(z | c)` together with an
 encoder `q(z | x, c)` that proposes latents for importance sampling. `c` holds optional
 covariates. The encoder reads `cat(c, x)`, the decoder reads `cat(c, z)`, and the prior reads
-`c` only when it is conditional. Every part is a `zuko.lazy.LazyDistribution`, so a Gaussian
-MLP, a normalizing flow or a mixture can fill any of the three roles.
+`c` only when it is conditional. Every part is a `zuko.lazy.LazyDistribution`: a Gaussian MLP,
+a normalizing flow or a mixture can be the encoder or the decoder, and a flow, a mixture or a
+fixed distribution can be the prior. A Gaussian MLP needs a context, so it can be the prior only
+when the prior is conditional. A mixture can't be reparameterized, so as the encoder it trains
+only by `EUBO(gradient="score")`.
 
 Draws come first in every shape. `k` draws for data of shape `(*batch, features)` give
 latents of shape `(k, *batch, latent)` and log densities of shape `(k, *batch)`.

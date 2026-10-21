@@ -3,7 +3,9 @@
 Deep latent variable models on [zuko](https://github.com/probabilists/zuko) distributions, and the objectives that train them.
 
 A `VAE` holds three zuko lazy distributions: an encoder `q(z | x, c)`, a decoder `p(x | z, c)`, and a prior `p(z)` or `p(z | c)`.
-Any of them can be a Gaussian MLP, a normalizing flow or a mixture.
+The encoder and the decoder can each be a Gaussian MLP, a normalizing flow or a mixture, and the prior can be a flow, a mixture or a fixed distribution such as `zuko.lazy.UnconditionalDistribution(DiagNormal, ...)`.
+A Gaussian MLP needs a context, so it can be the prior only when the prior is conditional.
+A mixture can't be reparameterized, so as the encoder it trains only by `EUBO(gradient="score")`.
 `c` holds optional covariates, which the encoder reads as `cat(c, x)`, the decoder as `cat(c, z)`, and a conditional prior as `c`.
 Seven objectives train the model from `k` importance-weighted draws of the encoder: ELBO, STL, IWAE, DReG, EUBO, CUBO and SUMO.
 
