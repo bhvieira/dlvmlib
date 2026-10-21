@@ -70,6 +70,9 @@ IWAE-STL is biased for `k > 1`, because IWAE's score-function term doesn't vanis
 `"dreg"` also scales the gradient reaching each draw by its normalized weight, which makes IWAE-DReG unbiased for IWAE's gradient (Tucker et al., 2019).
 The ELBO needs no DReG form: its score-function term already vanishes in expectation, and DReG with one draw is STL.
 At the exact posterior the STL and DReG encoder gradients are exactly zero, so they stop there, while the plain reparameterized estimators keep their noise.
+`IWAE(k, repeats=m)` is MIWAE (Rainforth et al., 2018): it takes `k * m` draws, splits them into `m` groups of `k`, and averages the `m` IWAE bounds.
+IWAE-DReG then normalizes each draw's weight within its group, so `IWAE(k, gradient="dreg", repeats=m)` is `m` independent `k`-draw IWAE-DReG estimates, averaged.
+The bound is that of `IWAE(k)`, looser than `IWAE(k * m)`, but the reparameterized encoder gradient's signal-to-noise ratio grows with `m`.
 `ELBO(k, analytic_kl=True)` computes the KL term in closed form when torch registers one, as between `DiagGaussian` and a diagonal Gaussian prior.
 It leaves no `log q` to freeze, so it takes only `gradient="reparam"`.
 
@@ -134,7 +137,8 @@ The tests take a minute or two on a CPU and run in double precision, because the
 The oracle is a linear-Gaussian model whose posterior is diagonal, so the affine Gaussian encoder contains it exactly, and the evidence, the ELBO, the EUBO and the CUBO are closed form.
 
 - At the exact posterior every objective returns `log p(x)` to rounding, and the STL and DReG encoder gradients vanish.
-- ELBO, ELBO-STL and analytic-KL ELBO are unbiased for the closed-form ELBO gradient; IWAE-DReG agrees with IWAE's gradient and has lower variance.
+- ELBO, ELBO-STL and analytic-KL ELBO are unbiased for the closed-form ELBO gradient; IWAE-DReG agrees with IWAE's gradient and has lower variance, with and without `repeats`.
+- On shared draws, IWAE with `repeats` lies strictly between the ELBO and IWAE on all the draws, and equals the ELBO with groups of one draw.
 - The model side of ELBO-STL, IWAE-STL, IWAE-DReG, EUBO and CUBO equals ELBO's or IWAE's draw for draw, and EUBO's model side matches the closed-form evidence gradient.
 - EUBO's encoder gradient, in both forms, matches the closed-form EUBO gradient; CUBO's direction matches the closed-form CUBO gradient at large `k`.
 - SUMO's tail and sampler follow Eq. 10, its sum telescopes to IWAE with unit weights, and it is unbiased for `m = 1` and `m = 3`.
@@ -159,5 +163,6 @@ tests/
 - Ji & Shen (2019). Stochastic variational inference via upper bound.
 - Kingma & Welling (2014). Auto-encoding variational Bayes.
 - Luo, Beatson, Norouzi, Zhu, Duvenaud, Adams & Chen (2020). SUMO: unbiased estimation of log marginal probability for latent variable models.
+- Rainforth, Kosiorek, Le, Maddison, Igl, Wood & Teh (2018). Tighter variational bounds are not necessarily better.
 - Roeder, Wu & Duvenaud (2017). Sticking the landing: simple, lower-variance gradient estimators for variational inference.
 - Tucker, Lawson, Gu & Maddison (2019). Doubly reparameterized gradient estimators for Monte Carlo objectives.

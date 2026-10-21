@@ -26,7 +26,14 @@ class PathEstimators(unittest.TestCase):
         torch.manual_seed(0)
         vae, x = lg.build(0.0), lg.data()
         params = encoder_parameters(vae)
-        for objective in (ELBO(1, gradient="stl"), ELBO(4, gradient="stl"), IWAE(4, "stl"), IWAE(4, "dreg")):
+        path_estimators = (
+            ELBO(1, gradient="stl"),
+            ELBO(4, gradient="stl"),
+            IWAE(4, "stl"),
+            IWAE(4, "dreg"),
+            IWAE(2, "dreg", repeats=2),
+        )
+        for objective in path_estimators:
             with self.subTest(objective=repr(objective)):
                 self.assertLess(gradient(objective, vae, x, params).abs().max().item(), 1e-10)
         for objective in (ELBO(1), IWAE(4)):
@@ -48,14 +55,18 @@ class PathEstimators(unittest.TestCase):
         self.assertLess(errors[repr(stl)], errors[repr(reparam)])
 
     def test_dreg_is_unbiased_for_the_iwae_gradient(self) -> None:
+        # With repeats, the weights must be normalized within each group of k draws. Normalized
+        # over all k * repeats draws, they'd target the gradient of IWAE(k * repeats) instead.
         torch.manual_seed(0)
         vae, x = lg.build(1.0), lg.data()[3]
         params = encoder_parameters(vae)
-        iwae, iwae_se = mean_gradient(IWAE(4), vae, x, params, reps=1000, batches=20)
-        dreg, dreg_se = mean_gradient(IWAE(4, "dreg"), vae, x, params, reps=1000, batches=20)
-        combined = (iwae_se**2 + dreg_se**2).sqrt()
-        self.assertTrue(((dreg - iwae).abs() < 4 * combined).all(), (dreg - iwae) / combined)
-        self.assertLess(dreg_se.norm().item(), iwae_se.norm().item())
+        for k, repeats in ((4, 1), (2, 2)):
+            with self.subTest(k=k, repeats=repeats):
+                iwae, iwae_se = mean_gradient(IWAE(k, repeats=repeats), vae, x, params, reps=1000, batches=20)
+                dreg, dreg_se = mean_gradient(IWAE(k, "dreg", repeats), vae, x, params, reps=1000, batches=20)
+                combined = (iwae_se**2 + dreg_se**2).sqrt()
+                self.assertTrue(((dreg - iwae).abs() < 4 * combined).all(), (dreg - iwae) / combined)
+                self.assertLess(dreg_se.norm().item(), iwae_se.norm().item())
 
 
 class ModelSide(unittest.TestCase):
@@ -66,6 +77,7 @@ class ModelSide(unittest.TestCase):
             (ELBO(6, gradient="stl"), ELBO(6)),
             (IWAE(6, "stl"), IWAE(6)),
             (IWAE(6, "dreg"), IWAE(6)),
+            (IWAE(3, "dreg", repeats=2), IWAE(3, repeats=2)),
             (EUBO(6), IWAE(6)),
             (CUBO(6), IWAE(6)),
         )

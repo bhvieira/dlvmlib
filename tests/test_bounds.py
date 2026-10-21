@@ -3,7 +3,8 @@
 At the exact posterior every log weight equals `log p(x)`, so every objective must return the
 evidence to rounding, whatever its reduction. Away from it, the reductions order themselves on
 shared draws: the mean is at most the log-mean-exp, which is at most the self-normalized mean
-and the chi estimate. Expectations are checked against the closed forms of `linear_gaussian`.
+and the chi estimate, and the mean of log-mean-exps over groups of draws lies between the first
+two. Expectations are checked against the closed forms of `linear_gaussian`.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ class Exactness(unittest.TestCase):
             IWAE(3),
             IWAE(3, "stl"),
             IWAE(3, "dreg"),
+            IWAE(3, "dreg", repeats=2),
             EUBO(3),
             EUBO(3, "score"),
             CUBO(3),
@@ -50,6 +52,20 @@ class Ordering(unittest.TestCase):
         self.assertTrue((values["ELBO"] <= values["IWAE"]).all())
         self.assertTrue((values["IWAE"] <= values["EUBO"]).all())
         self.assertTrue((values["IWAE"] <= values["CUBO"]).all())
+
+    def test_repeats_average_separate_bounds_on_shared_draws(self) -> None:
+        # On the same 8 draws, eight groups of 1 are the ELBO, one group of 8 is IWAE, and two
+        # groups of 4 lie strictly between them.
+        vae, x = lg.build(1.0), lg.data()
+
+        def on_shared_draws(objective: IWAE | ELBO) -> torch.Tensor:
+            torch.manual_seed(0)
+            return objective(vae, x).detach()
+
+        elbo, iwae, miwae = on_shared_draws(ELBO(8)), on_shared_draws(IWAE(8)), on_shared_draws(IWAE(4, repeats=2))
+        torch.testing.assert_close(on_shared_draws(IWAE(1, repeats=8)), elbo, rtol=1e-12, atol=0)
+        self.assertTrue((elbo < miwae).all())
+        self.assertTrue((miwae < iwae).all())
 
     def test_iwae_climbs_toward_the_evidence(self) -> None:
         torch.manual_seed(0)
@@ -90,6 +106,7 @@ class Arguments(unittest.TestCase):
             lambda: ELBO(1, analytic_kl=True, gradient="stl"),
             lambda: IWAE(0),
             lambda: IWAE(4, gradient="score"),  # ty: ignore[invalid-argument-type]
+            lambda: IWAE(4, repeats=0),
             lambda: EUBO(1),
             lambda: EUBO(4, gradient="paper"),  # ty: ignore[invalid-argument-type]
             lambda: CUBO(1),

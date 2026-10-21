@@ -72,22 +72,23 @@ def _require_gradient(gradient: str, *allowed: str) -> str:
 class Bound(abc.ABC):
     """A lower bound from `k` draws, the computation that ELBO and IWAE share.
 
-    A subclass chooses the reduction over draws in `reduce`, and whether `log q` is evaluated
-    with the encoder frozen in `frozen`.
+    A subclass chooses the reduction over draws in `reduce`, whether `log q` is evaluated with
+    the encoder frozen in `frozen`, and how many groups of `k` draws to take in `repeats`.
     """
 
     frozen: bool = False
+    repeats: int = 1
 
     def __init__(self, k: int = 1) -> None:
         self.k = _require_draws(k, 1)
 
     def __call__(self, vae: VAE, x: Tensor, c: Tensor | None = None) -> Tensor:
-        z, log_q = vae.draw(x, c, self.k, frozen=self.frozen)
+        z, log_q = vae.draw(x, c, self.k * self.repeats, frozen=self.frozen)
         return self.reduce(vae.log_joint(x, z, c) - log_q, z)
 
     @abc.abstractmethod
     def reduce(self, log_w: Tensor, z: Tensor) -> Tensor:
-        """Reduces the log weights of shape `(k, *batch)` to the bound, of shape `batch`."""
+        """Reduces the log weights of shape `(k * repeats, *batch)` to the bound, of shape `batch`."""
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(k={self.k})"
@@ -157,21 +158,32 @@ class IWAE(Bound):
     gradient without the score-function term.
 
     Whatever the gradient, the value and the model's gradient are IWAE's.
+
+    With `repeats=m`, this is MIWAE (Rainforth et al., 2018), the mean of `m` independent IWAE
+    bounds of `k` draws each. It takes `k * m` draws and reduces each group of `k` on its own, so
+    with `gradient="dreg"` the weights `w_hat_i` are normalized within each group. Its
+    expectation is that of `IWAE(k)`, looser than `IWAE(k * m)` on as many draws. In exchange,
+    the reparameterized encoder gradient's signal-to-noise ratio grows with `m`, where it falls
+    with `k` (Rainforth et al., 2018).
     """
 
-    def __init__(self, k: int, gradient: Literal["reparam", "stl", "dreg"] = "reparam") -> None:
+    def __init__(self, k: int, gradient: Literal["reparam", "stl", "dreg"] = "reparam", repeats: int = 1) -> None:
         super().__init__(k)
         self.gradient = _require_gradient(gradient, "reparam", "stl", "dreg")
+        if repeats < 1:
+            raise ValueError(f"repeats must be at least 1, got {repeats}")
+        self.repeats = repeats
         self.frozen = gradient != "reparam"
 
     def reduce(self, log_w: Tensor, z: Tensor) -> Tensor:
+        log_w = log_w.unflatten(0, (self.k, self.repeats))
         if self.gradient == "dreg" and z.requires_grad:
-            weights = torch.softmax(log_w.detach(), dim=0).unsqueeze(-1)
+            weights = torch.softmax(log_w.detach(), dim=0).flatten(0, 1).unsqueeze(-1)
             z.register_hook(lambda grad: grad * weights)
-        return log_mean_exp(log_w)
+        return log_mean_exp(log_w).mean(dim=0)
 
     def __repr__(self) -> str:
-        return f"IWAE(k={self.k}, gradient={self.gradient!r})"
+        return f"IWAE(k={self.k}, gradient={self.gradient!r}, repeats={self.repeats})"
 
 
 def two_sided(

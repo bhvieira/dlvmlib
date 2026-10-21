@@ -3,6 +3,12 @@
 All notable changes to dlvmlib are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- MIWAE, as `IWAE(k, repeats=m)`: the mean of `m` independent IWAE bounds of `k` draws each (Rainforth et al., 2018). With `gradient="dreg"`, the weights are normalized within each group of `k`.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added
@@ -33,5 +39,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `SUMO`, an unbiased estimate of `log p(x | c)` by Russian roulette, with the tail `RouletteTail`.
 - `VAE.log_marginal` for held-out log-likelihood and `VAE.sample` for ancestral sampling.
 
+[Unreleased]: https://github.com/bhvieira/dlvmlib/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/bhvieira/dlvmlib/releases/tag/v0.2.0
 [0.1.0]: https://github.com/bhvieira/dlvmlib/releases/tag/v0.1.0
