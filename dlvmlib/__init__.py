@@ -4,8 +4,8 @@ A `VAE` holds three zuko lazy distributions: an encoder `q(z | x, c)`, a decoder
 and a prior `p(z)` or `p(z | c)`. The objectives train it from `k` importance-weighted draws of
 the encoder:
 
-    ELBO, STL     lower bounds averaged over draws; STL drops the encoder's score-function term
-    IWAE, DReG    the importance-weighted bound; DReG's encoder gradient is doubly reparameterized
+    ELBO, STL     the ELBO averaged over draws, and ELBO-STL, which drops the score-function term
+    IWAE, DReG    the importance-weighted bound, and IWAE-DReG, which is doubly reparameterized
     EUBO, CUBO    upper bounds that the encoder descends while the model climbs IWAE
     SUMO          an unbiased estimate of log p(x | c); the encoder descends its variance
 

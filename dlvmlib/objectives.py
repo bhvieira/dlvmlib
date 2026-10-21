@@ -7,15 +7,18 @@ value is the objective's estimate and whose gradient is the objective's gradient
 one optimizer.
 
 ELBO, STL, IWAE and DReG are lower bounds on `log p(x | c)` that the encoder and the model both
-climb. They share one computation and differ in two switches: how the `k` log weights are
-reduced, and whether `log q` is evaluated with the encoder's parameters frozen.
+climb. They share one computation, which two switches set: how the `k` log weights are reduced,
+and whether `log q` is evaluated with the encoder's parameters frozen.
 
                      log q follows the encoder      log q with the encoder frozen
-    mean over k      ELBO                           STL
-    log-mean-exp     IWAE                           DReG
+    mean over k      ELBO                           ELBO-STL (`STL`)
+    log-mean-exp     IWAE                           IWAE-STL (not provided)
 
 Freezing the encoder inside `log q` leaves the encoder's gradient only the path through `z`,
-without the score-function term.
+without the score-function term (Roeder et al., 2017). That keeps ELBO-STL unbiased, but
+IWAE-STL is biased for `k > 1`, because IWAE's score-function term doesn't vanish in
+expectation (Tucker et al., 2019, who name it STL). IWAE-DReG (`DReG`) also scales the gradient
+reaching each draw by its normalized weight, which removes that bias.
 
 EUBO and CUBO are upper bounds, and SUMO (in `dlvmlib.sumo`) is an unbiased estimate. For these
 three the encoder and the model follow different gradients. The encoder descends the upper
@@ -118,7 +121,7 @@ class ELBO(Bound):
 
 
 class STL(ELBO):
-    """The ELBO with the "sticking the landing" encoder gradient (Roeder et al., 2017).
+    """ELBO-STL: the ELBO with the "sticking the landing" encoder gradient (Roeder et al., 2017).
 
     `log q` is evaluated with the encoder frozen, so the encoder's gradient keeps the path
     through `z` and drops the score-function term, whose expectation is zero. The estimate
@@ -151,13 +154,13 @@ class IWAE(Bound):
 
 
 class DReG(IWAE):
-    """IWAE with the doubly reparameterized encoder gradient (Tucker et al., 2019).
+    """IWAE-DReG: IWAE with the doubly reparameterized encoder gradient (Tucker et al., 2019).
 
-    `log q` is evaluated with the encoder frozen, as in STL, and the gradient that reaches each
-    draw `z_i` is scaled once more by its normalized weight `w_hat_i = w_i / sum_j w_j`. The
+    `log q` is evaluated with the encoder frozen, as in ELBO-STL, and the gradient that reaches
+    each draw `z_i` is scaled once more by its normalized weight `w_hat_i = w_i / sum_j w_j`. The
     encoder then receives `sum_i w_hat_i^2 (d log w_i / d z_i) (d z_i / d phi)`, an unbiased
-    estimate of IWAE's gradient without the score-function term. The value and the model's
-    gradient are IWAE's.
+    estimate of IWAE's gradient without the score-function term. Freezing alone would give
+    IWAE-STL, which is biased for `k > 1`. The value and the model's gradient are IWAE's.
     """
 
     frozen = True

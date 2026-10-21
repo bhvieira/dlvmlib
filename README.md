@@ -7,7 +7,7 @@ The encoder and the decoder can each be a Gaussian MLP, a normalizing flow or a 
 A Gaussian MLP needs a context, so it can be the prior only when the prior is conditional.
 A mixture can't be reparameterized, so as the encoder it trains only by `EUBO(gradient="score")`.
 `c` holds optional covariates, which the encoder reads as `cat(c, x)`, the decoder as `cat(c, z)`, and a conditional prior as `c`.
-Seven objectives train the model from `k` importance-weighted draws of the encoder: ELBO, STL, IWAE, DReG, EUBO, CUBO and SUMO.
+Seven objectives train the model from `k` importance-weighted draws of the encoder: ELBO, ELBO-STL, IWAE, IWAE-DReG, EUBO, CUBO and SUMO.
 
 ## Install
 
@@ -52,19 +52,21 @@ One `backward()` and one optimizer train the encoder, the decoder and the prior,
 
 Every objective draws `z_1..z_k ~ q(z | x, c)` and forms the log weights `log w_i = log p(x, z_i | c) - log q(z_i | x, c)`.
 
-### Lower bounds: ELBO, STL, IWAE, DReG
+### Lower bounds: ELBO, ELBO-STL, IWAE, IWAE-DReG
 
-These four share one computation and differ in two switches: how the `k` log weights are reduced, and whether `log q` is evaluated with the encoder's parameters frozen.
+These four share one computation, which two switches set: how the `k` log weights are reduced, and whether `log q` is evaluated with the encoder's parameters frozen.
+IWAE-DReG adds a third step.
 
 |                  | `log q` follows the encoder | `log q` with the encoder frozen |
 |------------------|-----------------------------|---------------------------------|
-| mean over `k`    | `ELBO(k)`                   | `STL(k)`                        |
-| log-mean-exp     | `IWAE(k)`                   | `DReG(k)`                       |
+| mean over `k`    | ELBO, `ELBO(k)`             | ELBO-STL, `STL(k)`              |
+| log-mean-exp     | IWAE, `IWAE(k)`             | IWAE-STL, not provided          |
 
 Freezing the encoder inside `log q` removes the score-function term from the encoder's gradient and leaves only the path through `z` (Roeder et al., 2017).
-STL is unbiased for the ELBO's gradient at any `k`.
-DReG additionally scales the gradient reaching each draw by its normalized weight, which makes it unbiased for IWAE's gradient (Tucker et al., 2019).
-At the exact posterior both gradients are exactly zero, so they stop there, while the plain reparameterized estimators keep their noise.
+ELBO-STL is unbiased for the ELBO's gradient at any `k`.
+IWAE-STL is biased for `k > 1`, because IWAE's score-function term doesn't vanish in expectation (Tucker et al., 2019, Section 6.1, where it's named STL).
+IWAE-DReG, `DReG(k)`, also scales the gradient reaching each draw by its normalized weight, which makes it unbiased for IWAE's gradient (Tucker et al., 2019).
+At the exact posterior the ELBO-STL and IWAE-DReG encoder gradients are exactly zero, so they stop there, while the plain reparameterized estimators keep their noise.
 `ELBO(k, analytic_kl=True)` computes the KL term in closed form when torch registers one, as between `DiagGaussian` and a diagonal Gaussian prior.
 
 ### Upper bounds and SUMO: EUBO, CUBO, SUMO
@@ -124,9 +126,9 @@ The tests take a minute or two on a CPU and run in double precision, because the
 
 The oracle is a linear-Gaussian model whose posterior is diagonal, so the affine Gaussian encoder contains it exactly, and the evidence, the ELBO, the EUBO and the CUBO are closed form.
 
-- At the exact posterior every objective returns `log p(x)` to rounding, and the STL and DReG encoder gradients vanish.
-- ELBO, STL and analytic-KL ELBO are unbiased for the closed-form ELBO gradient; DReG agrees with IWAE's gradient and has lower variance.
-- The model side of STL, DReG, EUBO and CUBO equals ELBO's or IWAE's draw for draw, and EUBO's model side matches the closed-form evidence gradient.
+- At the exact posterior every objective returns `log p(x)` to rounding, and the ELBO-STL and IWAE-DReG encoder gradients vanish.
+- ELBO, ELBO-STL and analytic-KL ELBO are unbiased for the closed-form ELBO gradient; IWAE-DReG agrees with IWAE's gradient and has lower variance.
+- The model side of ELBO-STL, IWAE-DReG, EUBO and CUBO equals ELBO's or IWAE's draw for draw, and EUBO's model side matches the closed-form evidence gradient.
 - EUBO's encoder gradient, in both forms, matches the closed-form EUBO gradient; CUBO's direction matches the closed-form CUBO gradient at large `k`.
 - SUMO's tail and sampler follow Eq. 10, its sum telescopes to IWAE with unit weights, and it is unbiased for `m = 1` and `m = 3`.
 - Every objective trains the encoder to the exact posterior; CUBO with 8 draws collapses, as documented.
