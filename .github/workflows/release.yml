@@ -20,7 +20,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
       # Refuses a tag that does not match the version in pyproject.toml.
       - run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
       - run: uv build
