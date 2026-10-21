@@ -1,0 +1,22 @@
+# The hooks run the ruff and ty that uv.lock pins, so they agree with `uv run ruff` and `uv run ty`.
+# Install them with `uv run pre-commit install`.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format --check --force-exclude
+        language: system
+        types_or: [python, pyi]
+      # ty checks the whole project, since a change in one file can break the types of another.
+      - id: ty
+        name: ty check
+        entry: uv run --frozen ty check
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
