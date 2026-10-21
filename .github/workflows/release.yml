@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  # The same checks as CI, so that a tag on an untested commit does not release.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  # Builds the sdist and the wheel and attaches them to a GitHub release whose notes are this
+  # version's section of CHANGELOG.md.
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      # Refuses a tag that does not match the version in pyproject.toml.
+      - run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+      - run: uv build
+      # Everything under this version's heading up to the next heading or the link references.
+      - run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '
+            /^## \[/ { p = index($0, "## [" v "]") == 1; next }
+            /^\[[^]]*\]: / { p = 0 }
+            p
+          ' CHANGELOG.md > notes.md
+          grep -q . notes.md
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
