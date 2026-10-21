@@ -3,6 +3,8 @@ name = "dlvmlib"
 version = "0.1.0"
 description = "Deep latent variable models on zuko distributions, trained by ELBO, STL, IWAE, DReG, EUBO, CUBO or SUMO"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Bruno Hebling Vieira", email = "bruno.hebling.vieira@gmail.com" }
 ]
