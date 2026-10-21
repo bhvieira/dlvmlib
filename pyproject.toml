@@ -1,6 +1,6 @@
 [project]
 name = "dlvmlib"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deep latent variable models on zuko distributions, trained by ELBO, IWAE, EUBO, CUBO or SUMO, with STL and DReG encoder gradients"
 readme = "README.md"
 license = "MIT"
