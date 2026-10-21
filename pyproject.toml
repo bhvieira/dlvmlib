@@ -17,6 +17,7 @@ dependencies = [
 [project.urls]
 Source = "https://github.com/bhvieira/dlvmlib"
 Issues = "https://github.com/bhvieira/dlvmlib/issues"
+Changelog = "https://github.com/bhvieira/dlvmlib/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
