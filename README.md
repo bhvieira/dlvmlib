@@ -7,7 +7,8 @@ The encoder and the decoder can each be a Gaussian MLP, a normalizing flow or a 
 A Gaussian MLP needs a context, so it can be the prior only when the prior is conditional.
 A mixture can't be reparameterized, so as the encoder it trains only by `EUBO(gradient="score")`.
 `c` holds optional covariates, which the encoder reads as `cat(c, x)`, the decoder as `cat(c, z)`, and a conditional prior as `c`.
-Seven objectives train the model from `k` importance-weighted draws of the encoder: ELBO, ELBO-STL, IWAE, IWAE-DReG, EUBO, CUBO and SUMO.
+Five objectives train the model from `k` importance-weighted draws of the encoder: ELBO, IWAE, EUBO, CUBO and SUMO.
+ELBO and IWAE also offer the ELBO-STL, IWAE-STL and IWAE-DReG encoder gradients.
 
 ## Install
 
@@ -24,7 +25,7 @@ To choose a CUDA or CPU build, install PyTorch first by following [its instructi
 import torch
 import zuko
 
-from dlvmlib import VAE, DiagGaussian, DReG
+from dlvmlib import IWAE, VAE, DiagGaussian
 
 features, latent, covariates = 64, 8, 3
 vae = VAE(
@@ -32,7 +33,7 @@ vae = VAE(
     decoder=zuko.flows.NSF(features, context=covariates + latent),   # p(x | z, c)
     prior=zuko.flows.MAF(latent),                                    # p(z)
 )
-objective = DReG(k=16)
+objective = IWAE(k=16, gradient="dreg")
 optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 
 for x, c in loader:
@@ -52,22 +53,25 @@ One `backward()` and one optimizer train the encoder, the decoder and the prior,
 
 Every objective draws `z_1..z_k ~ q(z | x, c)` and forms the log weights `log w_i = log p(x, z_i | c) - log q(z_i | x, c)`.
 
-### Lower bounds: ELBO, ELBO-STL, IWAE, IWAE-DReG
+### Lower bounds: ELBO and IWAE
 
-These four share one computation, which two switches set: how the `k` log weights are reduced, and whether `log q` is evaluated with the encoder's parameters frozen.
-IWAE-DReG adds a third step.
+`ELBO(k)` and `IWAE(k)` share one computation and differ in how the `k` log weights are reduced.
+Their `gradient` argument chooses the encoder's gradient estimator.
 
-|                  | `log q` follows the encoder | `log q` with the encoder frozen |
-|------------------|-----------------------------|---------------------------------|
-| mean over `k`    | ELBO, `ELBO(k)`             | ELBO-STL, `STL(k)`              |
-| log-mean-exp     | IWAE, `IWAE(k)`             | IWAE-STL, not provided          |
+|                  | `gradient="reparam"` | `gradient="stl"` | `gradient="dreg"` |
+|------------------|----------------------|------------------|-------------------|
+| mean over `k`    | ELBO                 | ELBO-STL         |                   |
+| log-mean-exp     | IWAE                 | IWAE-STL         | IWAE-DReG         |
 
-Freezing the encoder inside `log q` removes the score-function term from the encoder's gradient and leaves only the path through `z` (Roeder et al., 2017).
+`"reparam"`, the default, differentiates `log q` along with the encoder.
+`"stl"` evaluates `log q` with the encoder's parameters frozen, which removes the score-function term from the encoder's gradient and leaves only the path through `z` (Roeder et al., 2017).
 ELBO-STL is unbiased for the ELBO's gradient at any `k`.
 IWAE-STL is biased for `k > 1`, because IWAE's score-function term doesn't vanish in expectation (Tucker et al., 2019, Section 6.1, where it's named STL).
-IWAE-DReG, `DReG(k)`, also scales the gradient reaching each draw by its normalized weight, which makes it unbiased for IWAE's gradient (Tucker et al., 2019).
-At the exact posterior the ELBO-STL and IWAE-DReG encoder gradients are exactly zero, so they stop there, while the plain reparameterized estimators keep their noise.
+`"dreg"` also scales the gradient reaching each draw by its normalized weight, which makes IWAE-DReG unbiased for IWAE's gradient (Tucker et al., 2019).
+The ELBO needs no DReG form: its score-function term already vanishes in expectation, and DReG with one draw is STL.
+At the exact posterior the STL and DReG encoder gradients are exactly zero, so they stop there, while the plain reparameterized estimators keep their noise.
 `ELBO(k, analytic_kl=True)` computes the KL term in closed form when torch registers one, as between `DiagGaussian` and a diagonal Gaussian prior.
+It leaves no `log q` to freeze, so it takes only `gradient="reparam"`.
 
 ### Upper bounds and SUMO: EUBO, CUBO, SUMO
 
@@ -129,9 +133,9 @@ The tests take a minute or two on a CPU and run in double precision, because the
 
 The oracle is a linear-Gaussian model whose posterior is diagonal, so the affine Gaussian encoder contains it exactly, and the evidence, the ELBO, the EUBO and the CUBO are closed form.
 
-- At the exact posterior every objective returns `log p(x)` to rounding, and the ELBO-STL and IWAE-DReG encoder gradients vanish.
+- At the exact posterior every objective returns `log p(x)` to rounding, and the STL and DReG encoder gradients vanish.
 - ELBO, ELBO-STL and analytic-KL ELBO are unbiased for the closed-form ELBO gradient; IWAE-DReG agrees with IWAE's gradient and has lower variance.
-- The model side of ELBO-STL, IWAE-DReG, EUBO and CUBO equals ELBO's or IWAE's draw for draw, and EUBO's model side matches the closed-form evidence gradient.
+- The model side of ELBO-STL, IWAE-STL, IWAE-DReG, EUBO and CUBO equals ELBO's or IWAE's draw for draw, and EUBO's model side matches the closed-form evidence gradient.
 - EUBO's encoder gradient, in both forms, matches the closed-form EUBO gradient; CUBO's direction matches the closed-form CUBO gradient at large `k`.
 - SUMO's tail and sampler follow Eq. 10, its sum telescopes to IWAE with unit weights, and it is unbiased for `m = 1` and `m = 3`.
 - Every objective trains the encoder to the exact posterior; CUBO with 8 draws collapses, as documented.
@@ -142,7 +146,7 @@ The oracle is a linear-Gaussian model whose posterior is diagonal, so the affine
 dlvmlib/
   model.py        VAE: wiring, draws, frozen evaluation, sampling, held-out log-likelihood
   families.py     DiagGaussian, StudentT, Bernoulli: conditional distributions from an MLP
-  objectives.py   ELBO, STL, IWAE, DReG on one base; EUBO, CUBO on two_sided
+  objectives.py   ELBO, IWAE on one base; EUBO, CUBO on two_sided
   sumo.py         SUMO, RouletteTail, sumo_estimate
 tests/
   linear_gaussian.py   the closed-form oracle

@@ -6,19 +6,19 @@ value is the objective's estimate and whose gradient is the objective's gradient
 `(-objective(vae, x, c).mean()).backward()` trains the encoder, the decoder and the prior with
 one optimizer.
 
-ELBO, STL, IWAE and DReG are lower bounds on `log p(x | c)` that the encoder and the model both
-climb. They share one computation, which two switches set: how the `k` log weights are reduced,
-and whether `log q` is evaluated with the encoder's parameters frozen.
+ELBO and IWAE are lower bounds on `log p(x | c)` that the encoder and the model both climb. They
+share one computation and differ in how the `k` log weights are reduced. Their `gradient`
+argument chooses the encoder's gradient estimator:
 
-                     log q follows the encoder      log q with the encoder frozen
-    mean over k      ELBO                           ELBO-STL (`STL`)
-    log-mean-exp     IWAE                           IWAE-STL (not provided)
+                     gradient="reparam"     gradient="stl"     gradient="dreg"
+    mean over k      ELBO                   ELBO-STL
+    log-mean-exp     IWAE                   IWAE-STL           IWAE-DReG
 
-Freezing the encoder inside `log q` leaves the encoder's gradient only the path through `z`,
-without the score-function term (Roeder et al., 2017). That keeps ELBO-STL unbiased, but
-IWAE-STL is biased for `k > 1`, because IWAE's score-function term doesn't vanish in
-expectation (Tucker et al., 2019, who name it STL). IWAE-DReG (`DReG`) also scales the gradient
-reaching each draw by its normalized weight, which removes that bias.
+`"stl"` evaluates `log q` with the encoder's parameters frozen, which leaves the encoder's
+gradient only the path through `z`, without the score-function term (Roeder et al., 2017). That
+keeps ELBO-STL unbiased, but IWAE-STL is biased for `k > 1`, because IWAE's score-function term
+doesn't vanish in expectation (Tucker et al., 2019, who name it STL). `"dreg"` also scales the
+gradient reaching each draw by its normalized weight, which removes that bias.
 
 EUBO and CUBO are upper bounds, and SUMO (in `dlvmlib.sumo`) is an unbiased estimate. For these
 three the encoder and the model follow different gradients. The encoder descends the upper
@@ -62,8 +62,15 @@ def _require_draws(k: int, least: int) -> int:
     return k
 
 
+def _require_gradient(gradient: str, *allowed: str) -> str:
+    if gradient not in allowed:
+        names = ", ".join(map(repr, allowed[:-1])) + f" or {allowed[-1]!r}"
+        raise ValueError(f"gradient must be {names}, got {gradient!r}")
+    return gradient
+
+
 class Bound(abc.ABC):
-    """A lower bound from `k` draws, the computation that ELBO, STL, IWAE and DReG share.
+    """A lower bound from `k` draws, the computation that ELBO and IWAE share.
 
     A subclass chooses the reduction over draws in `reduce`, and whether `log q` is evaluated
     with the encoder frozen in `frozen`.
@@ -89,15 +96,26 @@ class Bound(abc.ABC):
 class ELBO(Bound):
     """The evidence lower bound `E_q[log w]`, averaged over `k` draws (Kingma & Welling, 2014).
 
+    With `gradient="stl"`, this is ELBO-STL, the "sticking the landing" encoder gradient
+    (Roeder et al., 2017). `log q` is evaluated with the encoder frozen, so the encoder's
+    gradient keeps the path through `z` and drops the score-function term, whose expectation is
+    zero. The estimate stays unbiased for the ELBO's gradient at any `k`, and its variance
+    vanishes as `q` approaches the posterior. The value and the model's gradient don't change.
+
     With `analytic_kl=True`, the KL divergence from the posterior to the prior is computed in
     closed form, and only the reconstruction term `log p(x | z, c)` is averaged over the draws.
     That needs a closed form registered with `torch.distributions.kl_divergence`, such as the
-    one between the `DiagGaussian` encoder and a diagonal Gaussian prior.
+    one between the `DiagGaussian` encoder and a diagonal Gaussian prior. It leaves no `log q`
+    to freeze, so it takes only `gradient="reparam"`.
     """
 
-    def __init__(self, k: int = 1, analytic_kl: bool = False) -> None:
+    def __init__(self, k: int = 1, analytic_kl: bool = False, gradient: Literal["reparam", "stl"] = "reparam") -> None:
         super().__init__(k)
+        self.gradient = _require_gradient(gradient, "reparam", "stl")
+        if analytic_kl and gradient != "reparam":
+            raise ValueError("analytic_kl=True leaves no log q to freeze; use gradient='reparam'")
         self.analytic_kl = analytic_kl
+        self.frozen = gradient == "stl"
 
     def __call__(self, vae: VAE, x: Tensor, c: Tensor | None = None) -> Tensor:
         if not self.analytic_kl:
@@ -117,25 +135,7 @@ class ELBO(Bound):
         return log_w.mean(dim=0)
 
     def __repr__(self) -> str:
-        return f"ELBO(k={self.k}, analytic_kl={self.analytic_kl})"
-
-
-class STL(ELBO):
-    """ELBO-STL: the ELBO with the "sticking the landing" encoder gradient (Roeder et al., 2017).
-
-    `log q` is evaluated with the encoder frozen, so the encoder's gradient keeps the path
-    through `z` and drops the score-function term, whose expectation is zero. The estimate
-    stays unbiased for the ELBO's gradient at any `k`, and its variance vanishes as `q`
-    approaches the posterior. The value and the model's gradient are the ELBO's.
-    """
-
-    frozen = True
-
-    def __init__(self, k: int = 1) -> None:
-        super().__init__(k)
-
-    def __repr__(self) -> str:
-        return f"STL(k={self.k})"
+        return f"ELBO(k={self.k}, analytic_kl={self.analytic_kl}, gradient={self.gradient!r})"
 
 
 class IWAE(Bound):
@@ -143,33 +143,35 @@ class IWAE(Bound):
 
     It's at least the ELBO on the same draws, and it approaches `log p(x | c)` as `k` grows.
     As `k` grows, the encoder's reparameterized gradient loses its signal relative to its noise
-    (Rainforth et al., 2018); `DReG` avoids that.
+    (Rainforth et al., 2018); IWAE-DReG avoids that.
+
+    With `gradient="stl"`, this is IWAE-STL (Roeder et al., 2017): `log q` is evaluated with the
+    encoder frozen, which drops the score-function term. For IWAE that term doesn't vanish in
+    expectation, so IWAE-STL is biased for `k > 1` (Tucker et al., 2019, who name it STL).
+
+    With `gradient="dreg"`, this is IWAE-DReG, the doubly reparameterized encoder gradient
+    (Tucker et al., 2019). `log q` is evaluated with the encoder frozen, and the gradient that
+    reaches each draw `z_i` is scaled once more by its normalized weight
+    `w_hat_i = w_i / sum_j w_j`. The encoder then receives
+    `sum_i w_hat_i^2 (d log w_i / d z_i) (d z_i / d phi)`, an unbiased estimate of IWAE's
+    gradient without the score-function term.
+
+    Whatever the gradient, the value and the model's gradient are IWAE's.
     """
 
-    def __init__(self, k: int) -> None:
+    def __init__(self, k: int, gradient: Literal["reparam", "stl", "dreg"] = "reparam") -> None:
         super().__init__(k)
+        self.gradient = _require_gradient(gradient, "reparam", "stl", "dreg")
+        self.frozen = gradient != "reparam"
 
     def reduce(self, log_w: Tensor, z: Tensor) -> Tensor:
-        return log_mean_exp(log_w)
-
-
-class DReG(IWAE):
-    """IWAE-DReG: IWAE with the doubly reparameterized encoder gradient (Tucker et al., 2019).
-
-    `log q` is evaluated with the encoder frozen, as in ELBO-STL, and the gradient that reaches
-    each draw `z_i` is scaled once more by its normalized weight `w_hat_i = w_i / sum_j w_j`. The
-    encoder then receives `sum_i w_hat_i^2 (d log w_i / d z_i) (d z_i / d phi)`, an unbiased
-    estimate of IWAE's gradient without the score-function term. Freezing alone would give
-    IWAE-STL, which is biased for `k > 1`. The value and the model's gradient are IWAE's.
-    """
-
-    frozen = True
-
-    def reduce(self, log_w: Tensor, z: Tensor) -> Tensor:
-        if z.requires_grad:
+        if self.gradient == "dreg" and z.requires_grad:
             weights = torch.softmax(log_w.detach(), dim=0).unsqueeze(-1)
             z.register_hook(lambda grad: grad * weights)
-        return super().reduce(log_w, z)
+        return log_mean_exp(log_w)
+
+    def __repr__(self) -> str:
+        return f"IWAE(k={self.k}, gradient={self.gradient!r})"
 
 
 def two_sided(
@@ -219,10 +221,8 @@ class EUBO:
     """
 
     def __init__(self, k: int, gradient: Literal["reparam", "score"] = "reparam") -> None:
-        if gradient not in ("reparam", "score"):
-            raise ValueError(f"gradient must be 'reparam' or 'score', got {gradient!r}")
+        self.gradient = _require_gradient(gradient, "reparam", "score")
         self.k = _require_draws(k, 2)
-        self.gradient = gradient
 
     def __call__(self, vae: VAE, x: Tensor, c: Tensor | None = None) -> Tensor:
         if self.gradient == "reparam":

@@ -14,7 +14,7 @@ import torch
 import zuko
 
 import tests  # noqa: F401  (double precision)
-from dlvmlib import EUBO, IWAE, VAE, Bernoulli, DiagGaussian, DReG, StudentT
+from dlvmlib import EUBO, IWAE, VAE, Bernoulli, DiagGaussian, StudentT
 from tests import linear_gaussian as lg
 from tests.sampling import encoder_parameters, model_parameters
 
@@ -102,7 +102,7 @@ class Families(unittest.TestCase):
         torch.manual_seed(0)
         vae = flow_vae()
         x, c = torch.randn(BATCH, FEATURES), torch.randn(BATCH, COVARIATES)
-        (-DReG(3)(vae, x, c).mean()).backward()
+        (-IWAE(3, "dreg")(vae, x, c).mean()).backward()
         for name, p in vae.named_parameters():
             with self.subTest(parameter=name):
                 grad = p.grad

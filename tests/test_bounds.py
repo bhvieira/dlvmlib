@@ -14,7 +14,7 @@ import torch
 import zuko
 
 import tests  # noqa: F401  (double precision)
-from dlvmlib import CUBO, ELBO, EUBO, IWAE, STL, SUMO, DReG
+from dlvmlib import CUBO, ELBO, EUBO, IWAE, SUMO
 from tests import linear_gaussian as lg
 from tests.sampling import mean_value
 
@@ -24,7 +24,17 @@ class Exactness(unittest.TestCase):
         torch.manual_seed(0)
         vae, x = lg.build(0.0), lg.data()
         evidence = lg.log_evidence(vae, x).detach()
-        objectives = (ELBO(3), STL(3), IWAE(3), DReG(3), EUBO(3), EUBO(3, "score"), CUBO(3), SUMO(m=2))
+        objectives = (
+            ELBO(3),
+            ELBO(3, gradient="stl"),
+            IWAE(3),
+            IWAE(3, "stl"),
+            IWAE(3, "dreg"),
+            EUBO(3),
+            EUBO(3, "score"),
+            CUBO(3),
+            SUMO(m=2),
+        )
         for objective in objectives:
             with self.subTest(objective=repr(objective)):
                 torch.testing.assert_close(objective(vae, x).detach(), evidence, rtol=0, atol=1e-10)
@@ -60,7 +70,7 @@ class Expectations(unittest.TestCase):
         torch.manual_seed(0)
         vae, x = lg.build(1.0), lg.data()[3]
         exact = lg.elbo(vae, x).item()
-        for objective in (ELBO(1), ELBO(4), STL(4), ELBO(1, analytic_kl=True)):
+        for objective in (ELBO(1), ELBO(4), ELBO(4, gradient="stl"), ELBO(1, analytic_kl=True)):
             with self.subTest(objective=repr(objective)):
                 mean, se = mean_value(objective, vae, x, reps=2000, batches=10)
                 self.assertLess(abs(mean.item() - exact), 4 * se.item())
@@ -76,7 +86,10 @@ class Arguments(unittest.TestCase):
     def test_invalid_arguments_are_refused(self) -> None:
         refused = (
             lambda: ELBO(0),
+            lambda: ELBO(1, gradient="dreg"),  # ty: ignore[invalid-argument-type]
+            lambda: ELBO(1, analytic_kl=True, gradient="stl"),
             lambda: IWAE(0),
+            lambda: IWAE(4, gradient="score"),  # ty: ignore[invalid-argument-type]
             lambda: EUBO(1),
             lambda: EUBO(4, gradient="paper"),  # ty: ignore[invalid-argument-type]
             lambda: CUBO(1),

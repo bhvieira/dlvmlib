@@ -1,9 +1,10 @@
 """Gradients: which side each objective trains, and whether its estimator targets the right gradient.
 
 Three families of checks. Path estimators (STL, DReG) must vanish at the exact posterior, where
-the reparameterized estimators they replace don't, and must stay unbiased away from it. The
-model side of DReG, EUBO and CUBO must be IWAE's, draw for draw, and must estimate the gradient
-of the evidence. The encoder side of EUBO and CUBO must descend the closed-form bound. Finally
+the reparameterized estimators they replace don't, and ELBO-STL and IWAE-DReG must stay unbiased
+away from it. The model side of STL, DReG, EUBO and CUBO must be the lower bound's, draw for
+draw, and must estimate the gradient of the evidence. The encoder side of EUBO and CUBO must
+descend the closed-form bound. Finally
 every objective must train the encoder to the exact posterior, which the Gaussian family
 contains, so that is where each divergence is minimized.
 """
@@ -15,7 +16,7 @@ import unittest
 import torch
 
 import tests  # noqa: F401  (double precision)
-from dlvmlib import CUBO, ELBO, EUBO, IWAE, STL, SUMO, DReG, RouletteTail
+from dlvmlib import CUBO, ELBO, EUBO, IWAE, SUMO, RouletteTail
 from tests import linear_gaussian as lg
 from tests.sampling import encoder_parameters, flat, gradient, mean_gradient, model_parameters
 
@@ -25,7 +26,7 @@ class PathEstimators(unittest.TestCase):
         torch.manual_seed(0)
         vae, x = lg.build(0.0), lg.data()
         params = encoder_parameters(vae)
-        for objective in (STL(1), STL(4), DReG(4)):
+        for objective in (ELBO(1, gradient="stl"), ELBO(4, gradient="stl"), IWAE(4, "stl"), IWAE(4, "dreg")):
             with self.subTest(objective=repr(objective)):
                 self.assertLess(gradient(objective, vae, x, params).abs().max().item(), 1e-10)
         for objective in (ELBO(1), IWAE(4)):
@@ -38,19 +39,20 @@ class PathEstimators(unittest.TestCase):
         params = encoder_parameters(vae)
         exact = flat(torch.autograd.grad(lg.elbo(vae, x), params))
         errors = {}
-        for objective in (ELBO(2), STL(2), ELBO(2, analytic_kl=True)):
+        reparam, stl = ELBO(2), ELBO(2, gradient="stl")
+        for objective in (reparam, stl, ELBO(2, analytic_kl=True)):
             with self.subTest(objective=repr(objective)):
                 mean, se = mean_gradient(objective, vae, x, params, reps=1000, batches=20)
                 self.assertTrue(((mean - exact).abs() < 4 * se + 1e-12).all(), (mean - exact) / se)
                 errors[repr(objective)] = se.norm().item()
-        self.assertLess(errors["STL(k=2)"], errors["ELBO(k=2, analytic_kl=False)"])
+        self.assertLess(errors[repr(stl)], errors[repr(reparam)])
 
     def test_dreg_is_unbiased_for_the_iwae_gradient(self) -> None:
         torch.manual_seed(0)
         vae, x = lg.build(1.0), lg.data()[3]
         params = encoder_parameters(vae)
         iwae, iwae_se = mean_gradient(IWAE(4), vae, x, params, reps=1000, batches=20)
-        dreg, dreg_se = mean_gradient(DReG(4), vae, x, params, reps=1000, batches=20)
+        dreg, dreg_se = mean_gradient(IWAE(4, "dreg"), vae, x, params, reps=1000, batches=20)
         combined = (iwae_se**2 + dreg_se**2).sqrt()
         self.assertTrue(((dreg - iwae).abs() < 4 * combined).all(), (dreg - iwae) / combined)
         self.assertLess(dreg_se.norm().item(), iwae_se.norm().item())
@@ -60,7 +62,13 @@ class ModelSide(unittest.TestCase):
     def test_model_side_matches_the_lower_bound_on_shared_draws(self) -> None:
         vae, x = lg.build(1.0), lg.data()
         params = model_parameters(vae)
-        pairs = ((STL(6), ELBO(6)), (DReG(6), IWAE(6)), (EUBO(6), IWAE(6)), (CUBO(6), IWAE(6)))
+        pairs = (
+            (ELBO(6, gradient="stl"), ELBO(6)),
+            (IWAE(6, "stl"), IWAE(6)),
+            (IWAE(6, "dreg"), IWAE(6)),
+            (EUBO(6), IWAE(6)),
+            (CUBO(6), IWAE(6)),
+        )
         for objective, reference in pairs:
             with self.subTest(objective=repr(objective)):
                 torch.manual_seed(0)
@@ -114,9 +122,9 @@ class Training(unittest.TestCase):
         objectives = (
             ELBO(1),
             ELBO(1, analytic_kl=True),
-            STL(1),
+            ELBO(1, gradient="stl"),
             IWAE(4),
-            DReG(4),
+            IWAE(4, "dreg"),
             EUBO(8),
             EUBO(8, gradient="score"),
             CUBO(64),
@@ -140,10 +148,10 @@ class Training(unittest.TestCase):
                 self.assertLess((flat(params) - target).abs().max().item(), 0.03)
 
     def test_path_estimators_land_on_the_posterior(self) -> None:
-        # At the posterior the STL and DReG gradients are exactly zero, so training stops there.
+        # At the posterior the ELBO-STL and IWAE-DReG gradients are exactly zero, so training stops there.
         x = lg.data().repeat(16, 1)
         target = flat(encoder_parameters(lg.build(0.0))).detach()
-        for objective in (STL(1), DReG(4)):
+        for objective in (ELBO(1, gradient="stl"), IWAE(4, "dreg")):
             with self.subTest(objective=repr(objective)):
                 torch.manual_seed(0)
                 vae = lg.build(1.0)
