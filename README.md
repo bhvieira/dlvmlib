@@ -16,7 +16,7 @@ uv sync
 uv run python -m unittest discover -s tests -t .
 ```
 
-The tests take about a minute on a CPU and run in double precision, because they compare against closed forms to tight tolerances.
+The tests take a minute or two on a CPU and run in double precision, because they compare against closed forms to tight tolerances.
 
 ## Quickstart
 
