@@ -70,8 +70,18 @@ def sumo_estimate(log_w: Tensor, m: int, inverse_tail: Tensor) -> Tensor:
     """Returns SUMO from `m + K` log weights along dim 0 and the `K` weights `1 / P(K >= j)`.
 
     The result has the shape of `log_w` without its first axis.
+
+    Raises:
+        ValueError: If `m` isn't between 1 and the number of draws, or if `inverse_tail` doesn't
+            hold one weight for each of the remaining draws.
     """
     draws = log_w.shape[0]
+    if not 1 <= m <= draws:
+        raise ValueError(f"m must lie between 1 and the {draws} draws, got {m}")
+    if inverse_tail.shape != (draws - m,):
+        raise ValueError(
+            f"{draws} draws with m={m} need {draws - m} roulette weights, got shape {tuple(inverse_tail.shape)}"
+        )
     counts = torch.arange(1, draws + 1, dtype=log_w.dtype, device=log_w.device)
     column = (-1,) + (1,) * (log_w.dim() - 1)
     iwae = torch.logcumsumexp(log_w, dim=0) - counts.log().view(column)

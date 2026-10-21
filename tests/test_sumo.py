@@ -49,6 +49,13 @@ class Estimate(unittest.TestCase):
             with self.subTest(m=m):
                 torch.testing.assert_close(sumo_estimate(log_w, m, torch.ones(9 - m)), log_mean_exp(log_w))
 
+    def test_mismatched_weights_are_refused(self) -> None:
+        # A single weight would otherwise broadcast across every roulette term.
+        log_w = torch.randn(9, 5)
+        for m, terms in ((3, 1), (3, 7), (0, 9), (10, 0)):
+            with self.subTest(m=m, terms=terms), self.assertRaises(ValueError):
+                sumo_estimate(log_w, m, torch.ones(terms))
+
     def test_sumo_is_unbiased(self) -> None:
         torch.manual_seed(0)
         vae, x = lg.build(1.0), lg.data()[3]
