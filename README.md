@@ -12,11 +12,11 @@ Seven objectives train the model from `k` importance-weighted draws of the encod
 ## Install
 
 ```bash
-uv sync
-uv run python -m unittest discover -s tests -t .
+pip install dlvmlib
 ```
 
-The tests take a minute or two on a CPU and run in double precision, because they compare against closed forms to tight tolerances.
+pip installs PyTorch from PyPI.
+To choose a CUDA or CPU build, install PyTorch first by following [its instructions](https://pytorch.org/get-started/locally/).
 
 ## Quickstart
 
@@ -108,6 +108,17 @@ The draws needed grow with the latent dimension.
 As in the paper's Algorithm 1, one number of terms `K` is drawn per call and shared by the batch, and every datapoint's estimate stays unbiased.
 `RouletteTail` is the paper's Eq. 10: `P(K >= j) = 1 / j` below `alpha = 80` and geometric beyond, about 5 terms on average.
 The paper clips the encoder's gradients, because the gradient of `SUMO^2` is occasionally very large.
+
+## Develop
+
+```bash
+uv sync
+uv run pre-commit install
+uv run python -m unittest discover -s tests -t .
+```
+
+`pre-commit install` makes every commit pass `ruff check`, `ruff format --check` and `ty check` first.
+The tests take a minute or two on a CPU and run in double precision, because they compare against closed forms to tight tolerances.
 
 ## Tests
 
