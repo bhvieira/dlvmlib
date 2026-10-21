@@ -95,7 +95,7 @@ The model's term is computed from detached draws, and the encoder's term with th
 `EUBO(gradient="reparam")`, the default, differentiates the self-normalized estimate through its weights.
 `EUBO(gradient="score")` is the paper's score form, `-sum_i w_hat_i d log q(z_i) / d phi` at fixed draws, and it also trains an encoder that can't be reparameterized, such as `Bernoulli`.
 The paper's Eq. 5 isn't offered.
-It leaves the factor `log w + 1` off the `log q` term, so it isn't the gradient of the bound, and it changes when the joint is scaled by a constant, as the paper's own minibatch scaling `N / S` does.
+It leaves the factor `log w + 1` off the `log q` term, so it isn't the gradient of the bound, and it changes when the joint is scaled by a constant, such as the evidence that separates the paper's joint from its posterior.
 On a one-dimensional Gaussian with `log p(x) = 5`, it gives `dU/dsigma = -2.33` where the exact value is `+0.34`.
 
 ### CUBO needs many draws
