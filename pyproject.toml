@@ -1,0 +1,40 @@
+[project]
+name = "dlvmlib"
+version = "0.1.0"
+description = "Deep latent variable models on zuko distributions, trained by ELBO, STL, IWAE, DReG, EUBO, CUBO or SUMO"
+readme = "README.md"
+authors = [
+    { name = "Bruno Hebling Vieira", email = "bruno.hebling.vieira@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.11.0",
+    "zuko>=1.6.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+    "ty>=0.0.34",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["dlvmlib"]
+
+# Matches the sibling libraries: long explanatory docstrings and signatures
+# that would otherwise wrap badly at 88.
+[tool.ruff]
+line-length = 120
+
+# Keeps the aligned comments in the README's code blocks, which ruff would otherwise reformat.
+[tool.ruff.format]
+exclude = ["*.md"]
+
+# stdlib, then torch/zuko, then this package. `tests` is local-folder too, so
+# the test helpers land in the same group as the package.
+[tool.ruff.lint.isort]
+known-local-folder = ["dlvmlib", "tests"]
