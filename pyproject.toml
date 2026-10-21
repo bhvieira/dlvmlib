@@ -8,10 +8,11 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Bruno Hebling Vieira", email = "bruno.hebling.vieira@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
+# The oldest versions the tests pass on: `torch.func` arrived in torch 2.0 and `zuko.lazy` in zuko 1.3.
 dependencies = [
-    "torch>=2.11.0",
-    "zuko>=1.6.0",
+    "torch>=2.0.0",
+    "zuko>=1.3.0",
 ]
 
 [project.urls]
@@ -25,7 +26,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.7.0",
+    "pre-commit>=4.0.0",
     "ruff>=0.15.12",
     "ty>=0.0.34",
 ]
