@@ -100,7 +100,8 @@ On a one-dimensional Gaussian with `log p(x) = 5`, it gives `dU/dsigma = -2.33` 
 
 ### CUBO needs many draws
 
-CUBO follows CHIVI's Eq. 3 and Algorithm 1, which divide each datapoint's gradient by `exp(n max_i log w_i)` to prevent overflow.
+CUBO follows CHIVI's Eq. 3, the reparameterized gradient of `exp(n CUBO)`, and takes one step from Algorithm 1, the paper's score-function version: it divides each datapoint's gradient by `exp(n max_i log w_i)`.
+The paper does that to avoid underflow, and it also prevents overflow.
 That rescaling depends on the draws, so each step follows the gradient of the biased `k`-draw estimate, which falls without bound as `q` narrows.
 On the test model the encoder collapses at `k = 8` and converges at `k = 64`.
 The draws needed grow with the latent dimension.

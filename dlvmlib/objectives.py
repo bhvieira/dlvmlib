@@ -244,9 +244,10 @@ class CUBO:
 
     The encoder descends `exp(n CUBO)` instead, which has the same minimizer and whose `k`-draw
     estimate is unbiased. Its reparameterized gradient is `n mean_i w_i^n d log w_i / d phi`
-    (their Eq. 3). Each datapoint's gradient is divided by `n exp(n max_i log w_i)` to prevent
-    overflow, as in their Algorithm 1. With a single draw that rescaling leaves no gradient, so
-    CUBO needs `k >= 2`.
+    (their Eq. 3). Each datapoint's gradient is divided by `n exp(n max_i log w_i)`. Their
+    Algorithm 1, a score-function version, divides by `exp(n max_i log w_i)` to avoid underflow,
+    and the division prevents overflow too. With a single draw that rescaling leaves no gradient,
+    so CUBO needs `k >= 2`.
 
     The rescaling depends on the draws, so it gives up the unbiasedness of Eq. 3: each step
     points along the gradient of the biased `k`-draw estimate. That estimate falls without
